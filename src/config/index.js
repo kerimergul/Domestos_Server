@@ -7,7 +7,7 @@ const { DB_URI, PORT, JWT_SECRET_KEY,
         MULTI_THREAD_LIMIT_VIZITE, MULTI_THREAD_LIMIT_CIKIS,
         MULTI_THREAD_LIMIT_BILDIRIM, MULTI_THREAD_LIMIT_CONFIRM } = process.env
 
-export const port = PORT || 5001;
+export const port = PORT || 3001;
 export const jwtSecretKey = JWT_SECRET_KEY;
 export const refreshTokenSecretKey = REFRESH_TOKEN_SECRET_KEY;
 export const dbUri = DB_URI;
