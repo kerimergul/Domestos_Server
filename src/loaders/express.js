@@ -39,21 +39,30 @@ export default (app) => {
 
   var trigger = false;
 
-  app.post("/api/qr/check", (req, res) => {
+  app.get("/api/qr/check", (req, res) => {
     res.setHeader("Content-Type", "application/json");
+    console.log(['trigger status', trigger])
     res.json({
       status: trigger,
     });
   });
 
-  app.post("/api/qr/set", (req, res) => {
+  app.get("/api/qr/set", (req, res) => {
     res.setHeader("Content-Type", "application/json");
     trigger = true;
+    console.log(['trigger set true', trigger])
+    res.json({
+      status: trigger,
+    });
   });
 
-  app.post("/api/qr/reset", (req, res) => {
+  app.get("/api/qr/reset", (req, res) => {
     res.setHeader("Content-Type", "application/json");
     trigger = false;
+    console.log(['trigger set false', trigger])
+    res.json({
+      status: trigger,
+    });
   });
 
 
@@ -66,10 +75,11 @@ export default (app) => {
     try {
       console.time('setCache')
       const list = await Image.find({});
+      console.log(['db Image count', list.length])
       db_counter = list.length;
-      for (let i = 1; i < list.length; i++) {
+      for (let i = 0; i < list.length; i++) {
         const img = list[i];
-        cache.set(i, img);
+        cache.set(i, img?.data);
       }
       console.timeEnd('setCache')
     } catch (error) {
@@ -80,15 +90,21 @@ export default (app) => {
 
   const verifyCache = async (req, res, next) => {
     try {
+      console.log(['verifyCache'])
       const client_image_count = req.body.count;
-      const hasCache = cache.has(`${client_image_count + 1}`);
+      const hasCache = cache.has(`${client_image_count}`);
       if (hasCache) {
-        const img = cache.get(`${client_image_count + 1}`);
+        const img = cache.get(`${client_image_count}`);
+        // console.log(['verifyCache', img])
+        const image = new Image({
+          data: img,
+        })
         res.send({
           status: true,
           hasNext: true,
-          img: img
+          img: image,
         });
+        res.end();
       } else {
         console.log(["cache'te yok"]);
         return next();
@@ -96,12 +112,21 @@ export default (app) => {
 
     } catch (err) {
       console.error(['verifyCache', err]);
+      res.send({
+        status: false,
+        hasNext: false,
+        img: {}
+      });
+      res.end();
     }
   };
 
   const hasNext = async (req, res, next) => {
+    res.setHeader("Content-Type", "application/json");
     try {
+      console.log(['hasNext'])
       const client_image_count = req.body.count;
+      console.log(['client', client_image_count, 'db', db_counter])
       if (db_counter > client_image_count) {
         console.log(['next image avaible']);
         return next();
@@ -111,6 +136,7 @@ export default (app) => {
           hasNext: false,
           img: {}
         });
+        // res.end();
       }
     } catch (err) {
       console.error(['hasNext', err])
@@ -119,65 +145,82 @@ export default (app) => {
         hasNext: false,
         img: {}
       });
+      // res.end();
     }
+    return res.end();
   }
 
   app.post("/api/image/getImage", hasNext, verifyCache, async (req, res) => {
-    const client_image_count = req.body.count;
-    let status = true;
-    const img = await Image.findOne({}).skip(client_image_count).catch((err) => {
-      console.log(err);
-      status = false;
-    });
-    if (!img) {
-      console.log(['RESİM YOK', skip])
-      status = false;
-    }
+    try {
+      console.log(['getImage'])
+      const client_image_count = req.body.count;
+      let status = true;
+      console.log(['skip', client_image_count])
+      const img = await Image.findOne({}).skip(client_image_count).catch((err) => {
+        console.log(err);
+        status = false;
+      });
+      if (!img) {
+        console.log(['RESİM YOK', skip])
+        status = false;
+      }
 
-    res.send({
-      status: status,
-      hasNext: true,
-      img: img,
-    });
-    res.end();
-    return;
+      res.send({
+        status: status,
+        hasNext: true,
+        img: img,
+      });
+      // res.end();
+    } catch (error) {
+      console.error(['error', error]);
+      res.send({
+        status: false,
+        hasNext: false,
+        img: {},
+      });
+      // res.end(); 
+    }
+    return res.end();
   });
 
   app.post("/api/image/upload", async (req, res) => {
-    let status = true;
-    let img = req.body.img;
+    try {
+      let status = true;
+      let img = req.body.img;
 
-    const image = new Image({
-      data: img,
-    })
+      const image = new Image({
+        data: img,
+      })
 
-    await image.save().catch((err) => {
-      console.log(err);
-      status = false;
-    })
+      await image.save().catch((err) => {
+        console.log(err);
+        status = false;
+      })
 
-    res.send({
-      status: status,
-    });
-    res.end();
+      res.send({
+        status: status,
+      });
+      res.end();
 
-    let db_counter_status = false;
-    while (!db_counter_status) {
-      Image.countDocuments().then((res) => {
-        db_counter = res;
-        db_counter_status = true;
-      }).catch((er) => {
+
+      const newCount = await Image.countDocuments().catch((er) => {
         console.error(er);
       });
+      console.log(['count after new upload', db_counter, newCount])
+      db_counter = newCount;
+      cache.set(`${db_counter}`, img);
+      trigger = false;
+    } catch (error) {
+      console.error(['upload', error])
     }
     return;
   });
 
-  app.get("/api/image/setCache", async (req, res) => {
-    setCache();
-    res.end();
-    return;
-  });
+  // app.get("/api/image/setCache", async (req, res) => {
+  setCache();
+  //   res.end();
+  //   return;
+  // });
 
   app.get('/', async (_req, res) => {
     // await setCache();
