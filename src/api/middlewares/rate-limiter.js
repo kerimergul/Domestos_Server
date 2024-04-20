@@ -10,7 +10,7 @@ const mongoConn = mongoose.createConnection(dbUri, {});
 const opts = {
   storeClient: mongoConn,
   tableName: 'rateLimits',
-  points: 100, // x requests
+  points: 400, // x requests
   duration: 60 // per y second by IP
 };
 
